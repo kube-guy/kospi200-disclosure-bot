@@ -1,0 +1,19 @@
+{
+  "name": "kospi200-disclosure-bot",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "코스피200 종목의 직전 영업일 주요공시를 카드 이미지로 만들어 Threads에 게시합니다.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "node index.js build",
+    "post": "node index.js post",
+    "dry": "DRY_RUN=true node index.js build && DRY_RUN=true node index.js post"
+  },
+  "dependencies": {
+    "playwright": "^1.49.0",
+    "libsodium-wrappers": "^0.7.15"
+  }
+}
