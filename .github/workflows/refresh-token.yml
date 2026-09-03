@@ -1,0 +1,31 @@
+name: Threads 토큰 갱신
+
+# 장기 토큰은 60일 유효. 만료 알림이 없으므로 여유를 두고 3주마다 갱신한다.
+on:
+  schedule:
+    - cron: '0 20 * * 6'  # 매주 토요일 05:00 KST
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: 의존성 설치
+        run: npm install
+
+      - name: 토큰 갱신 및 Secret 업데이트
+        env:
+          THREADS_ACCESS_TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: node scripts/refresh-token.js

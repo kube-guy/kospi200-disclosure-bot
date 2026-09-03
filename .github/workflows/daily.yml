@@ -1,0 +1,103 @@
+name: 코스피200 주요공시 게시
+
+on:
+  schedule:
+    # 21:00 UTC = 다음날 06:00 KST. 일~목(UTC) = 월~금(KST)
+    - cron: '0 21 * * 0-4'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: '실제 게시하지 않고 카드만 생성 (아티팩트로 확인)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: kospi200-disclosure
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: 의존성 설치
+        run: npm install
+
+      - name: Chromium 설치
+        run: npx playwright install --with-deps chromium
+
+      - name: 카드 생성
+        run: node index.js build
+
+      - name: 게시 여부 판정
+        id: state
+        run: |
+          if [ ! -f out/post.json ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=$(jq -r '.skip' out/post.json)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 카드 아티팩트 업로드
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: disclosure-card
+          path: |
+            docs/cards/*.png
+            out/post.json
+          if-no-files-found: ignore
+          retention-days: 14
+
+      # Threads API는 로컬 파일 업로드를 지원하지 않고 공개 URL만 받는다.
+      # 그래서 게시 전에 카드를 먼저 커밋해서 raw URL을 만들어 둔다.
+      - name: 카드 커밋 및 푸시
+        if: steps.state.outputs.skip == 'false'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/cards
+          if git diff --staged --quiet; then
+            echo "커밋할 변경이 없습니다"
+          else
+            git commit -m "card: $(jq -r '.cardName' out/post.json)"
+            git push
+          fi
+
+      - name: Threads 게시
+        if: steps.state.outputs.skip == 'false'
+        env:
+          THREADS_USER_ID: ${{ secrets.THREADS_USER_ID }}
+          THREADS_ACCESS_TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
+          THREADS_TOPIC_TAG: 주식
+          DRY_RUN: ${{ inputs.dry_run || 'false' }}
+        run: node index.js post
+
+      - name: 결과 요약
+        if: always()
+        run: |
+          {
+            echo "### 실행 결과"
+            if [ -f out/post.json ]; then
+              echo ''
+              echo '```json'
+              jq '{skip, cardName, imageUrl, meta}' out/post.json
+              echo '```'
+              echo ''
+              echo '#### 본문'
+              echo ''
+              jq -r '.caption // "(없음)"' out/post.json
+            else
+              echo '상태 파일이 없습니다.'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
