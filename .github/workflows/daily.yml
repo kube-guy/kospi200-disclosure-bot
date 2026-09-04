@@ -71,7 +71,20 @@ jobs:
             echo "커밋할 변경이 없습니다"
           else
             git commit -m "card: $(jq -r '.cardName' out/post.json)"
-            git push
+            pushed=false
+            for i in 1 2 3; do
+              if git push; then
+                pushed=true
+                break
+              fi
+              echo "push 실패 (${i}/3), 원격 변경분을 반영해 재시도합니다"
+              git fetch origin main
+              git rebase -X ours origin/main
+            done
+            if [ "$pushed" != "true" ]; then
+              echo "3회 재시도 후에도 push 실패"
+              exit 1
+            fi
           fi
 
       - name: Threads 게시
