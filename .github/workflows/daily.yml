@@ -114,3 +114,35 @@ jobs:
               echo '상태 파일이 없습니다.'
             fi
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # 실패해도 알림이 없어 토큰 갱신이 3주, 공시 게시가 5일 동안 방치된 적이 있다.
+  # 실패하면 이슈를 만들고, 이미 열린 이슈가 있으면 댓글만 달아 중복을 막는다.
+  notify-failure:
+    needs: publish
+    if: failure()
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: 실패 이슈 생성
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          REPO: ${{ github.repository }}
+          TITLE: '[자동] 코스피200 주요공시 게시 실패'
+        run: |
+          gh label create workflow-failure -R "$REPO" --color B60205 \
+            --description '워크플로 자동 실패 알림' --force >/dev/null 2>&1 || true
+
+          body=$(printf '%s\n\n- 실행 로그: %s\n- 트리거: %s\n- 시각(UTC): %s\n' \
+            "워크플로가 실패했습니다." "$RUN_URL" "${{ github.event_name }}" "$(date -u '+%Y-%m-%d %H:%M')")
+
+          existing=$(gh issue list -R "$REPO" --state open --label workflow-failure \
+            --json number,title --jq "[.[] | select(.title == \"$TITLE\")] | .[0].number")
+
+          if [ -n "$existing" ] && [ "$existing" != "null" ]; then
+            gh issue comment "$existing" -R "$REPO" --body "$body"
+            echo "기존 이슈 #$existing 에 댓글을 남겼습니다."
+          else
+            gh issue create -R "$REPO" --title "$TITLE" --body "$body" --label workflow-failure
+          fi
