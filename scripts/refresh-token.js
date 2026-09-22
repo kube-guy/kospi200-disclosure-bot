@@ -5,7 +5,11 @@
 //   THREADS_ACCESS_TOKEN  현재 장기 토큰
 //   GH_PAT                Secrets 쓰기 권한이 있는 GitHub 토큰 (fine-grained: Secrets read/write)
 //   GITHUB_REPOSITORY     owner/repo (Actions가 자동 주입)
-import sodium from 'libsodium-wrappers';
+// libsodium-wrappers 0.7.16 의 ESM 번들은 같은 폴더에 없는 './libsodium.mjs' 를 import 해
+// ERR_MODULE_NOT_FOUND 로 죽는다(패키지 자체 버그). CJS 빌드는 정상이므로 그쪽을 쓴다.
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
+const sodium = require('libsodium-wrappers');
 import { refreshLongLivedToken } from '../src/threads.js';
 
 const SECRET_NAME = 'THREADS_ACCESS_TOKEN';
